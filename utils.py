@@ -119,9 +119,20 @@ REGION_KEYWORDS = {
     "New Zealand": ["new zealand", "nz remote", "remote nz", "remote - nz"],
     "Canada": ["canada", "ca remote", "remote canada", "remote - ca"],
     "UK": ["united kingdom", "uk remote", "remote uk", "great britain", "remote - uk"],
+    # Only phrases that signal the employer will hire from ANY country.
+    # Deliberately excludes generic "fully remote" / "100% remote" — those
+    # describe the work arrangement, not the hiring geography, and were
+    # causing country-specific roles to be mislabeled Worldwide.
     "Worldwide": [
-        "worldwide", "anywhere", "global", "international", "work from anywhere",
-        "fully remote", "100% remote", "remote worldwide", "remote (worldwide)",
+        "worldwide", "anywhere in the world", "hire globally", "hiring globally",
+        "work from anywhere", "remote worldwide", "remote (worldwide)",
+        "open to candidates globally", "no location restriction",
+        "hire from anywhere", "open to applicants worldwide",
+        "candidates from any country", "remote from any country",
+        "globally distributed team", "global remote team", "borderless hiring",
+        "location independent", "regardless of your location",
+        "regardless of location", "no matter where you're located",
+        "no matter where you are located",
     ],
 }
 
@@ -139,14 +150,37 @@ def should_exclude(text: str):
     return False, None
 
 
+_GENERIC_LOCATION_WORDS = {"remote", "hybrid", "onsite", "on-site", "anywhere", ""}
+
+
+def _distinct_location_segments(location_text: str) -> list:
+    parts = re.split(r"[,/|]| and ", location_text or "")
+    return [p.strip() for p in parts if p.strip() and p.strip().lower() not in _GENERIC_LOCATION_WORDS]
+
+
 def detect_region(location_text: str, description_text: str = "") -> str:
     combined = (location_text + " " + description_text).lower()
+
+    # Most companies never write "we hire globally" explicitly — they just
+    # list every country they'll accept. 3+ distinct countries in the
+    # location field is a real-world signal of broad hiring, even without
+    # magic words, so check this BEFORE single-region keywords (otherwise a
+    # posting listing "US, UK, Germany, India, Brazil" would get stuck on
+    # the first "US" match and miss that it's actually broad).
+    if len(_distinct_location_segments(location_text)) >= 3:
+        return "Worldwide"
+
     for region, keywords in REGION_KEYWORDS.items():
         for kw in keywords:
             if kw in combined:
                 return region
-    if "remote" in combined:
-        return "Worldwide"
+
+    # No explicit region/worldwide signal found — don't guess "Worldwide" just
+    # because the word "remote" appears somewhere. Fall back to the job's
+    # actual listed location so country-specific roles aren't mislabeled.
+    loc = (location_text or "").strip()
+    if loc and loc.lower() != "remote":
+        return loc
     return "Unknown"
 
 

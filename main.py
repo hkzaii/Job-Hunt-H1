@@ -34,11 +34,23 @@ def _send_slack(message: str):
         pass
 
 
+def _days_since_posted(date_str: str) -> str:
+    if not date_str or date_str == "N/A":
+        return ""
+    try:
+        posted = datetime.strptime(date_str, "%Y-%m-%d")
+        delta = (datetime.utcnow() - posted).days
+        return str(max(delta, 0))
+    except ValueError:
+        return ""
+
+
 def build_job(title, company, rate, location, url, date_posted, description=""):
     full_text = f"{title} {location} {description}"
     excluded, _ = should_exclude(full_text)
     region = detect_region(location, description)
     remote = is_remote_job(location, description)
+    date_posted_clean = (date_posted or "").strip() or "N/A"
     return {
         "title": (title or "").strip() or "N/A",
         "company": (company or "").strip() or "N/A",
@@ -46,7 +58,8 @@ def build_job(title, company, rate, location, url, date_posted, description=""):
         "location": (location or "").strip() or "Remote",
         "region": region,
         "platform": PLATFORM_NAME,
-        "date_posted": (date_posted or "").strip() or "N/A",
+        "date_posted": date_posted_clean,
+        "days_since_posted": _days_since_posted(date_posted_clean),
         "url": (url or "").strip(),
         "visa_flag": "Yes" if excluded else "No",
         "scraped_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),

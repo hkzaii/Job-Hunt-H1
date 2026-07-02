@@ -14,6 +14,17 @@ HEADERS = [
     "Platform", "Date Posted", "Job URL", "Visa Flag", "Scraped At", "Description",
 ]
 
+# Extra columns appended only on specific platform tabs — never on the shared
+# Job_Scrape_Log mirror tab, since other repos' scrapers also write there and
+# must keep that schema stable.
+EXTRA_HEADERS = {
+    "Greenhouse": ["Days Since Posted"],
+}
+
+
+def _headers_for(worksheet_name: str) -> list:
+    return HEADERS + EXTRA_HEADERS.get(worksheet_name, [])
+
 
 class SheetsManager:
     def __init__(self, credentials_source: str, sheet_id: str):
@@ -58,9 +69,9 @@ class SheetsManager:
 
     def get_existing_urls(self, worksheet_name: str = "Job_Scrape_Log") -> set:
         ws = self._get_or_create_worksheet(worksheet_name)
-        existing = ws.row_values(1)
-        if existing != HEADERS:
-            ws.update([HEADERS], "A1")
+        expected = _headers_for(worksheet_name)
+        if ws.row_values(1) != expected:
+            ws.update([expected], "A1")
         all_vals = ws.get_all_values()
         if len(all_vals) <= 1:
             return set()
@@ -77,6 +88,8 @@ class SheetsManager:
 
         ws = self._get_or_create_worksheet(worksheet_name)
         existing_urls = self.get_existing_urls(worksheet_name)
+        extra_cols = EXTRA_HEADERS.get(worksheet_name, [])
+        url_col = HEADERS.index("Job URL")
 
         new_rows = []
         for job in jobs:
@@ -84,7 +97,7 @@ class SheetsManager:
             if url and url in existing_urls:
                 continue
             existing_urls.add(url)
-            new_rows.append([
+            row = [
                 job.get("title", ""),
                 job.get("company", ""),
                 job.get("rate", ""),
@@ -96,15 +109,19 @@ class SheetsManager:
                 job.get("visa_flag", "No"),
                 job.get("scraped_at", ""),
                 job.get("description", ""),
-            ])
+            ]
+            for col in extra_cols:
+                row.append(job.get(col.lower().replace(" ", "_"), ""))
+            new_rows.append(row)
 
         if new_rows:
             ws.append_rows(new_rows, value_input_option="USER_ENTERED")
-            # Mirror to main log if writing to a platform tab
+            # Mirror to main log if writing to a platform tab (trimmed back to
+            # the shared 11-column schema — extra columns are tab-specific)
             if worksheet_name != "Job_Scrape_Log":
                 main_ws = self._get_or_create_worksheet("Job_Scrape_Log")
                 main_existing = self.get_existing_urls("Job_Scrape_Log")
-                main_rows = [r for r in new_rows if r[7] not in main_existing]
+                main_rows = [r[:len(HEADERS)] for r in new_rows if r[url_col] not in main_existing]
                 if main_rows:
                     main_ws.append_rows(main_rows, value_input_option="USER_ENTERED")
 
