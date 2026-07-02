@@ -145,7 +145,7 @@ async def main():
     valid_jobs = match_jobs(company_jobs)
     print(f"Matched {len(valid_jobs)} valid jobs against your keywords")
 
-    new_count = sheets.append_jobs(valid_jobs)
+    new_count = sheets.append_jobs(valid_jobs, worksheet_name="Greenhouse")
     total_elapsed = time.time() - start
 
     print("\n" + "=" * 60)

@@ -56,8 +56,11 @@ class SheetsManager:
     # Deduplication
     # ------------------------------------------------------------------
 
-    def get_existing_urls(self) -> set:
-        ws = self._get_or_create_worksheet("Job_Scrape_Log")
+    def get_existing_urls(self, worksheet_name: str = "Job_Scrape_Log") -> set:
+        ws = self._get_or_create_worksheet(worksheet_name)
+        existing = ws.row_values(1)
+        if existing != HEADERS:
+            ws.update([HEADERS], "A1")
         all_vals = ws.get_all_values()
         if len(all_vals) <= 1:
             return set()
@@ -68,12 +71,12 @@ class SheetsManager:
     # Write jobs
     # ------------------------------------------------------------------
 
-    def append_jobs(self, jobs: list) -> int:
+    def append_jobs(self, jobs: list, worksheet_name: str = "Job_Scrape_Log") -> int:
         if not jobs:
             return 0
 
-        ws = self._get_or_create_worksheet("Job_Scrape_Log")
-        existing_urls = self.get_existing_urls()
+        ws = self._get_or_create_worksheet(worksheet_name)
+        existing_urls = self.get_existing_urls(worksheet_name)
 
         new_rows = []
         for job in jobs:
@@ -97,6 +100,13 @@ class SheetsManager:
 
         if new_rows:
             ws.append_rows(new_rows, value_input_option="USER_ENTERED")
+            # Mirror to main log if writing to a platform tab
+            if worksheet_name != "Job_Scrape_Log":
+                main_ws = self._get_or_create_worksheet("Job_Scrape_Log")
+                main_existing = self.get_existing_urls("Job_Scrape_Log")
+                main_rows = [r for r in new_rows if r[7] not in main_existing]
+                if main_rows:
+                    main_ws.append_rows(main_rows, value_input_option="USER_ENTERED")
 
         return len(new_rows)
 

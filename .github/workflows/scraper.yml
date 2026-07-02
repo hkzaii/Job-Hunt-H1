@@ -2,7 +2,7 @@ name: Greenhouse Full Lookup
 
 on:
   schedule:
-    - cron: "0 10 * * *"
+    - cron: "0 6 * * *"  # 11:00 GMT+5
   workflow_dispatch:
 
 jobs:
