@@ -109,7 +109,7 @@ SEARCH_KEYWORDS = [
     "ServiceNow Developer remote",
 ]
 
-REGION_KEYWORDS = {
+NAMED_REGION_KEYWORDS = {
     "US Remote": [
         "us remote", "united states remote", "remote usa", "remote us", "anywhere in us",
         "remote (us)", "remote - us", "remote, us", "usa remote", "remote united states",
@@ -119,22 +119,28 @@ REGION_KEYWORDS = {
     "New Zealand": ["new zealand", "nz remote", "remote nz", "remote - nz"],
     "Canada": ["canada", "ca remote", "remote canada", "remote - ca"],
     "UK": ["united kingdom", "uk remote", "remote uk", "great britain", "remote - uk"],
-    # Only phrases that signal the employer will hire from ANY country.
-    # Deliberately excludes generic "fully remote" / "100% remote" — those
-    # describe the work arrangement, not the hiring geography, and were
-    # causing country-specific roles to be mislabeled Worldwide.
-    "Worldwide": [
-        "worldwide", "anywhere in the world", "hire globally", "hiring globally",
-        "work from anywhere", "remote worldwide", "remote (worldwide)",
-        "open to candidates globally", "no location restriction",
-        "hire from anywhere", "open to applicants worldwide",
-        "candidates from any country", "remote from any country",
-        "globally distributed team", "global remote team", "borderless hiring",
-        "location independent", "regardless of your location",
-        "regardless of location", "no matter where you're located",
-        "no matter where you are located",
-    ],
 }
+
+# Explicit, unambiguous statements that the employer hires from any country.
+# These override a specific location field if present (a company can state
+# "we hire globally" even while showing one office location).
+STRONG_WORLDWIDE_KEYWORDS = [
+    "worldwide", "anywhere in the world", "hire globally", "hiring globally",
+    "work from anywhere", "remote worldwide", "remote (worldwide)",
+    "open to candidates globally", "no location restriction",
+    "hire from anywhere", "open to applicants worldwide",
+    "candidates from any country", "remote from any country",
+    "globally distributed team", "global remote team", "borderless hiring",
+    "location independent", "regardless of your location",
+    "regardless of location", "no matter where you're located",
+    "no matter where you are located",
+]
+
+# Weaker signals — describe the work arrangement (no office), not who can
+# apply. Only used as a last resort when the location field gives no
+# specific place to go on, so they no longer override a real country like
+# "Poland" or "India" the way they used to.
+WEAK_REMOTE_KEYWORDS = ["fully remote", "100% remote"]
 
 
 def get_random_user_agent():
@@ -170,17 +176,29 @@ def detect_region(location_text: str, description_text: str = "") -> str:
     if len(_distinct_location_segments(location_text)) >= 3:
         return "Worldwide"
 
-    for region, keywords in REGION_KEYWORDS.items():
+    # Explicit, deliberate statements about hiring geography always win,
+    # even over a single listed office location.
+    for kw in STRONG_WORLDWIDE_KEYWORDS:
+        if kw in combined:
+            return "Worldwide"
+
+    for region, keywords in NAMED_REGION_KEYWORDS.items():
         for kw in keywords:
             if kw in combined:
                 return region
 
-    # No explicit region/worldwide signal found — don't guess "Worldwide" just
-    # because the word "remote" appears somewhere. Fall back to the job's
-    # actual listed location so country-specific roles aren't mislabeled.
+    # A specific location beats a generic "fully remote" style phrase — a
+    # company can be 100% remote while only hiring within one country.
     loc = (location_text or "").strip()
     if loc and loc.lower() != "remote":
         return loc
+
+    # No specific location to go on — now it's fair to use the weaker
+    # "fully remote"/"100% remote" phrasing as a last-resort signal.
+    for kw in WEAK_REMOTE_KEYWORDS:
+        if kw in combined:
+            return "Worldwide"
+
     return "Unknown"
 
 
